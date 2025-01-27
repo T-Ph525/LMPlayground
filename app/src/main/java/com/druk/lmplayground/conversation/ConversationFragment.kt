@@ -41,6 +41,9 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import com.druk.lmplayground.models.SelectModelDialog
 import com.druk.lmplayground.theme.PlaygroundTheme
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.MobileAds
 import kotlinx.coroutines.launch
 
 class ConversationFragment : Fragment() {
@@ -177,6 +180,12 @@ class ConversationFragment : Fragment() {
                                 }
                             }
                         )
+                        val adView = AdView(context).apply {
+                            adSize = com.google.android.gms.ads.AdSize.BANNER
+                            adUnitId = "ca-app-pub-3940256099942544/6300978111"
+                        }
+                        val adRequest = AdRequest.Builder().build()
+                        adView.loadAd(adRequest)
                     }
                 }
             }
