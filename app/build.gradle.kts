@@ -136,4 +136,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+
+    implementation("com.google.android.gms:play-services-ads:21.0.0")
+    implementation("com.google.android.gms:play-services-ads-lite:21.0.0")
 }
