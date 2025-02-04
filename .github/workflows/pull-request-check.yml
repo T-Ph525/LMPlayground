@@ -1,51 +1,85 @@
-name: Pull Request Check
+name: Generated APK AAB 2 Bundle Tool (Upload - Create Artifact To Github Action)
 
-on: 
-   pull_request:
-   workflow_dispatch:
+env:
+  main_project_module: app
+  playstore_name: Sierra
+  ks_path: key.jks
+  ks_store_pass: '@irayA12'
+  ks_alias: key0
+  ks_alias_pass: '@irayA12'
+
+on:
+  push:
+    branches:
+      - 'release/**'
+  workflow_dispatch:
 
 jobs:
-
-  AndroidTest:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      with:
-        submodules: recursive
-    - name: Enable KVM group perms
-      run: |
-        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-        sudo udevadm control --reload-rules
-        sudo udevadm trigger --name-match=kvm
-        ls /dev/kvm
-    - uses: actions/setup-java@v4
-      with:
-        distribution: 'zulu'
-        java-version: '21'
-        cache: 'gradle'
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-    - name: Install Android Emulator
-      run: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "emulator"
-    - name: Install Android Emulator image
-      run: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "system-images;android-33;google_apis;x86_64"
-    - name: Create Android Emulator
-      run: $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager create avd -n ci-test -k "system-images;android-33;google_apis;x86_64" -d "pixel" --force
-    - name: Start ADB server
-      run: adb start-server
-    - name: Start Android Emulator
-      run: $ANDROID_HOME/emulator/emulator -no-window -avd ci-test -noaudio > /dev/null &
-    - name: Run connected android tests
-      run: |
-        adb wait-for-device;
-        ./gradlew app:cAT
-    - name: Publish Report
-      uses: mikepenz/action-junit-report@v3
-      if: success() || failure() # always run even if the previous step fails
-      with:
-        report_paths: app/build/outputs/androidTest-results/connected/**/*.xml
-        check_name: AndroidTestReport
-        detailed_summary: true
-        include_passed: true
+      - uses: actions/checkout@v3
+
+      - name: Set current date as env variable
+        run: echo "date_today=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+
+      - name: Set repository name as env variable
+        run: echo "repository_name=$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')" >> $GITHUB_ENV
+
+      - name: Set Up JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Change wrapper permissions
+        run: chmod +x ./gradlew
+
+      - name: Run gradle tests
+        run: ./gradlew test --stacktrace
+
+      - name: Build gradle project
+        run: ./gradlew build
+
+      - name: Build apk debug project (APK) - ${{ env.main_project_module }} module
+        run: ./gradlew assembleDebug
+
+      - name: Build apk release project (APK) - ${{ env.main_project_module }} module
+        run: ./gradlew assemble
+
+      - name: Build app bundle release (AAB) - ${{ env.main_project_module }} module
+        run: ./gradlew ${{ env.main_project_module }}:bundleRelease
+
+      - name: Set Env Artifact name from generated aab
+        run: |
+          cd ${{ env.main_project_module }}/build/outputs/bundle/release/
+          files=(*)
+          echo "generated_name_aab=${files[0]%.*}" >> $GITHUB_ENV
+
+      - name: Build APK(s) Release from bundle using bundletool (Path same with bundle output)
+        run: java -jar ".github/lib/bundletool.jar" build-apks --bundle=${{ env.main_project_module }}/build/outputs/bundle/release/${{ env.generated_name_aab }}.aab --output=${{ env.main_project_module }}/build/outputs/bundle/release/${{ env.generated_name_aab }}.apks --mode=universal --ks="app/${{ env.ks_path }}" --ks-pass=pass:${{ env.ks_store_pass }} --ks-key-alias=${{ env.ks_alias }} --key-pass=pass:${{ env.ks_alias_pass }}
+
+      - name: Duplicate APK(s) Release to zip file and extract
+        run: |
+          cd ${{ env.main_project_module }}/build/outputs/bundle/release/
+          unzip -p ${{ env.generated_name_aab }}.apks universal.apk > ${{ env.generated_name_aab }}.apk
+
+      - name: Upload APK Debug - ${{ env.repository_name }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - APK(s) debug generated
+          path: ${{ env.main_project_module }}/build/outputs/apk/debug/
+
+      - name: Upload APK Release - ${{ env.repository_name }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - APK(s) release generated
+          path: ${{ env.main_project_module }}/build/outputs/apk/release/
+
+      - name: Upload AAB (App Bundle) Release - ${{ env.repository_name }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - App bundle(s) AAB release generated
+          path: ${{ env.main_project_module }}/build/outputs/bundle/release/
